@@ -1,0 +1,57 @@
+services:
+
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: deezer-downloader-app
+    container_name: deezer-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - DEEZER_CONFIG=/app/deezer-downloader.ini
+      - DATABASE_URL=sqlite:////data/deezer.db
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - CORS_ORIGINS=https://kaets.sbs
+    volumes:
+      - ./data:/data
+      - ./downloads:/mnt/deezer-downloader
+      - ./movies:/mnt/movies:ro
+    expose:
+      - "5000"
+    networks:
+      - internal
+
+  nginx:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    image: deezer-nginx-frontend
+    container_name: deezer-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - app
+    networks:
+      - internal
+
+  certbot:
+    image: certbot/certbot
+    container_name: deezer-certbot
+    restart: unless-stopped
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --quiet; sleep 12h; done'"
+
+networks:
+  internal:
+    driver: bridge
